@@ -1,0 +1,14 @@
+include:
+  - template: Auto-DevOps.gitlab-ci.yml
+
+test:
+  stage: test
+  script:
+    - cd client && npm install && npm run test
+    - cd ../server && npm install && npm run test
+
+build:
+  stage: build
+  script:
+    - cd client && npm install && npm run build
+    - cd ../server && npm install && npm run build
