@@ -12,6 +12,7 @@ import { LeadCampaignModule } from './modules/lead-campaign/lead-campaign.module
 import { CampaignModule } from './modules/campaign/campaign.module';
 import { BuyerModule } from './modules/buyer/buyer.module';
 import { EnrichmentApiModule } from './modules/enrichment-api/enrichment-api.module';
+import { AuthModule } from './modules/auth/auth.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { EnrichmentApiModule } from './modules/enrichment-api/enrichment-api.mod
     CampaignModule,
     BuyerModule,
     EnrichmentApiModule,
+    AuthModule,
   ],
   controllers: [AppController],
   providers: [AppService, DynamoConfigService],
