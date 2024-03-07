@@ -35,7 +35,14 @@ export class AuthController {
   }
 
   @Post('login')
-  @UseGuards(LocalGuard)
+  @UsePipes(
+    new JoiValidationPipe(
+      Joi.object({
+        email: Joi.string().email().required(),
+        password: Joi.string().required(),
+      }),
+    ),
+  )
   login(@Body() loginUser: LoginDto) {
     return this.authService.login(loginUser);
   }
@@ -43,6 +50,25 @@ export class AuthController {
   @Post('logout')
   logout() {
     return this.authService.logout();
+  }
+
+  @Post('forgot-password')
+  @UsePipes(
+    new JoiValidationPipe(
+      Joi.object({
+        email: Joi.string().email().required(),
+      }),
+    ),
+  )
+  forgotPassword(@Body() { email }: { email: string }) {
+    return this.authService.forgotPassword(email);
+  }
+
+  @Post('verify-reset')
+  verifyResetPasswordToken(
+    @Body() { id, token }: { id: string; token: string },
+  ) {
+    return this.authService.verifyResetPasswordToken(id, token);
   }
 
   @Get()
@@ -54,5 +80,11 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   status(@Req() req: { user: any }) {
     return req.user;
+  }
+
+  @Get('protected')
+  @UseGuards(LocalGuard)
+  protected() {
+    return 'Protected route';
   }
 }

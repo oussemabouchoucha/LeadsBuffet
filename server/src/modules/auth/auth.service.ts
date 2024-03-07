@@ -1,12 +1,19 @@
-import { Injectable, NotAcceptableException } from '@nestjs/common';
+import {
+  Injectable,
+  NotAcceptableException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
-import { AuthPayloadDto } from './dto/auth.dto';
 import { User } from 'src/modules/user/entities/user.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
-import * as bcrypt from 'bcrypt';
+import { hashPassword, comparePasswords } from './helpers/password.helper';
+import { MailService } from 'src/services/mail.service';
+import { html, subject } from './helpers/forgot.helper';
+import { ConfigService } from '@nestjs/config';
+import * as jwt from 'jsonwebtoken';
 
 @Injectable()
 export class AuthService {
@@ -14,29 +21,86 @@ export class AuthService {
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     private jwtService: JwtService,
+    private mailService: MailService,
+    private configService: ConfigService,
   ) {}
 
   async register(registerUser: RegisterDto) {
-    const userExists = await this.userRepository.findOne({
-      where: { email: registerUser.email },
-    });
+    const { username, email, password } = registerUser;
 
-    if (userExists) return new NotAcceptableException('User already exists');
-    registerUser.password = await this.hashPassword(registerUser.password);
+    if (
+      await this.userRepository.findOne({ where: [{ username }, { email }] })
+    ) {
+      throw new NotAcceptableException(
+        'User already exists, please login or use another email or username.',
+      );
+    }
 
-    const user = this.userRepository.create(registerUser);
-    const savedUser = await this.userRepository.save(user);
-    const token = await this.generateJwtToken(savedUser);
+    const savedUser = await this.userRepository.save(
+      this.userRepository.create({
+        ...registerUser,
+        password: await hashPassword(password),
+      }),
+    );
 
-    return token;
+    return this.generateJwtToken(savedUser);
   }
 
-  login(loginUser: LoginDto) {
+  async login(loginUser: LoginDto) {
     return this.validateUser(loginUser);
   }
 
   logout() {
     return 'Logged out';
+  }
+
+  async forgotPassword(email: string) {
+    const user = await this.isUserExist(email);
+    if (!user) throw new UnauthorizedException('User not found');
+
+    const expiresIn = '25m';
+    const token = jwt.sign(
+      { id: user.id },
+      `${user.password}${this.configService.get('JWT_SECRET')}`,
+      { expiresIn },
+    );
+    const link = `${this.configService.get('PUBLIC_APP_URL')}/reset-password/${user.id}/${token}`;
+    return this.mailService.sendMail(email, subject, html(link));
+  }
+
+  async resetPassword(id: string, token: string, password: string) {
+    const user = await this.userRepository.findOne({
+      where: { id: parseInt(id) },
+      select: ['id', 'password'],
+    });
+    if (!user) throw new UnauthorizedException('User not found');
+    try {
+      jwt.verify(
+        token,
+        `${user.password}${this.configService.get('JWT_SECRET')}`,
+      );
+    } catch (error) {
+      throw new UnauthorizedException('Invalid token');
+    }
+    user.password = await hashPassword(password);
+    return this.userRepository.save(user);
+  }
+
+  async verifyResetPasswordToken(id: string, token: string) {
+    const user = await this.userRepository.findOne({
+      where: { id: parseInt(id) },
+      select: ['id', 'password'],
+    });
+    if (!user) throw new UnauthorizedException('User not found');
+    try {
+      jwt.verify(
+        token,
+        `${user.password}${this.configService.get('JWT_SECRET')}`,
+      );
+    } catch (error) {
+      throw new UnauthorizedException('Invalid token');
+    }
+    return user.id;
   }
 
   getAll() {
@@ -45,12 +109,15 @@ export class AuthService {
     });
   }
 
-  async validateUser({ username, password }: AuthPayloadDto) {
-    const findUser = await this.userRepository.findOne({ where: { username } });
-    if (!findUser) return null;
-    if (await this.comparePasswords(password, findUser.password)) {
-      return await this.generateJwtToken(findUser);
-    }
+  isUserExist(email: string): Promise<User> {
+    return this.userRepository.findOne({ where: { email } });
+  }
+
+  async validateUser({ email, password }: LoginDto) {
+    const user = await this.isUserExist(email);
+    return user && (await comparePasswords(password, user.password))
+      ? this.generateJwtToken(user)
+      : new UnauthorizedException('Invalid credentials');
   }
 
   async generateJwtToken(user: User) {
@@ -63,17 +130,5 @@ export class AuthService {
     return {
       access_token: this.jwtService.sign(payload),
     };
-  }
-
-  async hashPassword(password: string): Promise<string> {
-    const saltRounds = 10;
-    return bcrypt.hash(password, saltRounds);
-  }
-
-  async comparePasswords(
-    plainTextPassword: string,
-    hashedPassword: string,
-  ): Promise<boolean> {
-    return bcrypt.compare(plainTextPassword, hashedPassword);
   }
 }

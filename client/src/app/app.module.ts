@@ -8,6 +8,8 @@ import { StoreModule } from '@ngrx/store';
 import { reducers, metaReducers } from './reducers';
 import { AuthModule } from './auth/auth.module';
 import { HomeComponent } from './home/home.component';
+import { FormsModule } from '@angular/forms';
+import { HttpClientModule } from '@angular/common/http';
 
 @NgModule({
   declarations: [AppComponent, BarChartComponent, HomeComponent],
@@ -18,6 +20,8 @@ import { HomeComponent } from './home/home.component';
       metaReducers,
     }),
     AuthModule,
+    FormsModule,
+    HttpClientModule,
   ],
   providers: [],
   bootstrap: [AppComponent],
